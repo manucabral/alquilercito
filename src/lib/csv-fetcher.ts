@@ -133,19 +133,50 @@ function parseCSV(
   csvContent: string,
   sourceOverride?: PropertySource
 ): PropertyListing[] {
-  const raw = csvContent.trim();
+  const raw = csvContent.replace(/\uFEFF/g, "").trim();
   if (!raw) return [];
-  const lines = raw.split(/\r?\n/);
-  if (lines.length < 2) return [];
 
-  const header = lines[0].split(",").map((h) =>
+  const records: string[][] = [];
+  let field = "";
+  let record: string[] = [];
+  let inQuotes = false;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '"') {
+      // Escaped quote when doubled inside quoted field
+      const next = raw[i + 1];
+      if (inQuotes && next === '"') {
+        field += '"';
+        i++; // skip next quote
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (ch === "," && !inQuotes) {
+      record.push(field);
+      field = "";
+    } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+      if (ch === "\r" && raw[i + 1] === "\n") i++;
+      record.push(field);
+      records.push(record);
+      field = "";
+      record = [];
+    } else {
+      field += ch;
+    }
+  }
+  if (field.length > 0 || record.length > 0) {
+    record.push(field);
+    records.push(record);
+  }
+  if (records.length < 2) return [];
+
+  const header = records[0].map((h) =>
     h
-      .replace(/(^\"|\"$)/g, "")
+      .replace(/(^"|"$)/g, "")
       .trim()
       .toLowerCase()
   );
   const colIndex = (name: string) => header.indexOf(name);
-
   const idx = {
     ubicacion: colIndex("ubicacion"),
     precio: colIndex("precio"),
@@ -164,26 +195,15 @@ function parseCSV(
   } as const;
 
   const listings: PropertyListing[] = [];
-
-  for (let li = 1; li < lines.length; li++) {
-    const line = lines[li];
-    if (!line.trim()) continue;
-    const fields: string[] = [];
-    let currentField = "";
-    let insideQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i];
-      if (char === '"') insideQuotes = !insideQuotes;
-      else if (char === "," && !insideQuotes) {
-        fields.push(currentField.trim());
-        currentField = "";
-      } else currentField += char;
-    }
-    fields.push(currentField.trim());
-
+  // Debug metric (comment out in production if noisy)
+  // console.info('[CSV] Registros totales:', records.length - 1);
+  for (let r = 1; r < records.length; r++) {
+    const row = records[r];
+    if (row.length === 1 && row[0].trim() === "") continue; // skip blank
     const get = (index: number) =>
-      index >= 0 && index < fields.length ? fields[index] : "";
-
+      (index >= 0 && index < row.length ? row[index] : "")
+        .replace(/(^"|"$)/g, "")
+        .trim();
     const ubicacion = get(idx.ubicacion);
     const precio = get(idx.precio);
     const esDolares = get(idx.esDolares);
@@ -277,6 +297,7 @@ function parseCSV(
     });
   }
 
+  // console.info('[CSV] Registros parseados válidos:', listings.length);
   return listings;
 }
 
