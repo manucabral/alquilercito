@@ -1,9 +1,11 @@
+import type React from "react";
 import type { Metadata } from "next";
 import "./globals.css";
+import { ThemeProvider } from "@/app/providers/ThemeProvider";
 
 export const metadata: Metadata = {
   title: "Alquilercito",
-  description: "Si, alquilo, luego existo",
+  description: "Compilación de propiedades en alquiler en Argentina",
 };
 
 export default function RootLayout({
@@ -12,8 +14,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`antialiased`}>{children}</body>
+    <html lang="es" suppressHydrationWarning>
+      <body className="antialiased">
+        <ThemeProvider>{children}</ThemeProvider>
+      </body>
     </html>
   );
 }
