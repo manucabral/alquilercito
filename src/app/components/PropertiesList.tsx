@@ -1,13 +1,12 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
-import Image from "next/image";
 import type { PropertyListing } from "@/lib/types";
+import { useCallback } from "react";
 
 interface PropertiesListProps {
   initialListings: PropertyListing[];
 }
 
-// TODO: move to hooks or context
 const ITEMS_PER_PAGE = 12;
 const FAVORITES_KEY = "alquilercito:favorites";
 
@@ -23,31 +22,48 @@ export default function PropertiesList({
     "all" | "1" | "2" | "3" | "4+"
   >("all");
   const [typeFilter, setTypeFilter] = useState<"all" | "ph" | "depto">("all");
+  const [updatedFilter, setUpdatedFilter] = useState<"all" | "today">("all");
   const [displayCount, setDisplayCount] = useState(ITEMS_PER_PAGE);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const loaderRef = useRef<HTMLDivElement>(null);
+  const [isPaging, setIsPaging] = useState(false); // control spinner visibility
+  const isPagingRef = useRef(false); // avoid rapid multiple increments from observer
+  const hasMoreRef = useRef(false); // latest hasMore snapshot for observer callback
 
   useEffect(() => {
     const target = loaderRef.current; // capture ref value for cleanup
+    if (!target) return;
     const observer = new IntersectionObserver(
       (entries) => {
         const first = entries[0];
-        if (first && first.isIntersecting)
-          setDisplayCount((p) => p + ITEMS_PER_PAGE);
+        if (!first || !first.isIntersecting) return;
+        // Guard: no more items or already paging
+        if (!hasMoreRef.current || isPagingRef.current) return;
+        isPagingRef.current = true;
+        setIsPaging(true);
+        setDisplayCount((p) => p + ITEMS_PER_PAGE);
       },
-      { rootMargin: "120px" }
+      { rootMargin: "160px" }
     );
-    if (target) observer.observe(target);
+    observer.observe(target);
     return () => {
-      if (target) observer.unobserve(target);
+      observer.disconnect();
     };
   }, []);
 
   useEffect(() => {
     setDisplayCount(ITEMS_PER_PAGE);
-  }, [currencyFilter, citySearch, sortOrder, roomsFilter, typeFilter]);
+  }, [
+    currencyFilter,
+    citySearch,
+    sortOrder,
+    roomsFilter,
+    typeFilter,
+    updatedFilter,
+    showFavoritesOnly,
+  ]);
 
   useEffect(() => {
     try {
@@ -118,13 +134,72 @@ export default function PropertiesList({
     return ls.filter((l) => isFav(l.url));
   };
 
+  const formatRelativeDate = useCallback((iso: string) => {
+    // Parse YYYY-MM-DD as local date (avoid UTC shift that pushes to previous day)
+    if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(iso)) return null;
+    const [y, m, d] = iso.split("-").map(Number);
+    if (!y || !m || !d) return null;
+    const startOfDate = new Date(y, m - 1, d); // local midnight
+    const now = new Date();
+    const startOfToday = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    );
+    const diffMs = startOfToday.getTime() - startOfDate.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays <= 0) return "Actualizado hoy";
+    if (diffDays === 1) return "Actualizado hace 1 día";
+    return `Actualizado hace ${diffDays} días`;
+  }, []);
+
+  const filterByUpdated = (ls: PropertyListing[]) => {
+    if (updatedFilter === "all") return ls;
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const d = now.getDate();
+    return ls.filter((l) => {
+      if (!l.publishedDate) return false;
+      if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(l.publishedDate)) return false;
+      const [py, pm, pd] = l.publishedDate.split("-").map(Number);
+      if (!py || !pm || !pd) return false;
+      return py === y && pm - 1 === m && pd === d;
+    });
+  };
+
   const filteredListings = sortListings(
     filterByRooms(
       filterByType(
-        filterByCity(filterByCurrency(filterByFavorites(initialListings)))
+        filterByCity(
+          filterByCurrency(filterByUpdated(filterByFavorites(initialListings)))
+        )
       )
     )
   );
+  // Clamp displayCount if filtered list shrinks below current window
+  useEffect(() => {
+    if (displayCount > filteredListings.length) {
+      setDisplayCount((prev) => Math.min(filteredListings.length, prev));
+    }
+  }, [filteredListings.length, displayCount]);
+
+  // Sync hasMore into ref and reset paging flags when page filled or completed
+  useEffect(() => {
+    const currentHasMore = displayCount < filteredListings.length;
+    hasMoreRef.current = currentHasMore;
+    if (!currentHasMore) {
+      // reached end
+      isPagingRef.current = false;
+      if (isPaging) setIsPaging(false);
+    } else {
+      // After adding items, allow future paging
+      if (isPagingRef.current) {
+        isPagingRef.current = false;
+        if (isPaging) setIsPaging(false);
+      }
+    }
+  }, [displayCount, filteredListings.length, isPaging]);
   const displayedListings = filteredListings.slice(0, displayCount);
   const hasMore = displayCount < filteredListings.length;
   const hasFilters =
@@ -133,6 +208,7 @@ export default function PropertiesList({
     sortOrder !== "none" ||
     roomsFilter !== "all" ||
     typeFilter !== "all" ||
+    updatedFilter !== "all" ||
     showFavoritesOnly;
 
   const Icon = ({ name, className }: { name: string; className?: string }) => {
@@ -248,7 +324,9 @@ export default function PropertiesList({
     return (
       <span
         className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md tracking-wide shadow-sm ${
-          isZP ? "bg-violet-600/90 text-white" : "bg-orange-500/90 text-white"
+          isZP
+            ? "bg-orange-500/90 text-white" // ZonaProp → naranja
+            : "bg-emerald-600/90 text-white" // ArgenProp → verde
         }`}
       >
         {isZP ? "ZonaProp" : "ArgenProp"}
@@ -307,6 +385,81 @@ export default function PropertiesList({
 
   const cards = useMemo(() => displayedListings, [displayedListings]);
 
+  // Simple inline carousel component (kept here to avoid new file for now)
+  const ImageCarousel = ({
+    images,
+    alt,
+  }: {
+    images: string[];
+    alt: string;
+  }) => {
+    const [idx, setIdx] = useState(0);
+    const total = images.length;
+    const go = (d: 1 | -1) => setIdx((p) => (p + d + total) % total);
+    return (
+      <div className="relative w-full h-full">
+        {images.map((src, i) => (
+          <img
+            key={i}
+            src={src || "/placeholder.svg"}
+            alt={alt}
+            loading={i === 0 ? "eager" : "lazy"}
+            className={`absolute inset-0 h-full w-full object-cover transition-opacity duration-500 ${
+              i === idx ? "opacity-100" : "opacity-0"
+            }`}
+          />
+        ))}
+        {total > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                go(-1);
+              }}
+              aria-label="Imagen anterior"
+              className="absolute top-1/2 -translate-y-1/2 left-2 h-7 w-7 rounded-full bg-black/40 text-white text-xs flex items-center justify-center backdrop-blur-sm hover:bg-black/55"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                go(1);
+              }}
+              aria-label="Imagen siguiente"
+              className="absolute top-1/2 -translate-y-1/2 right-2 h-7 w-7 rounded-full bg-black/40 text-white text-xs flex items-center justify-center backdrop-blur-sm hover:bg-black/55"
+            >
+              ›
+            </button>
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+              {images.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setIdx(i);
+                  }}
+                  aria-label={`Ver imagen ${i + 1}`}
+                  className={`h-1.5 w-1.5 rounded-full transition ${
+                    i === idx ? "bg-white" : "bg-white/40 hover:bg-white/60"
+                  }`}
+                />
+              ))}
+            </div>
+            <div className="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded-full bg-black/50 text-white font-medium tracking-wide">
+              {idx + 1}/{total}
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
       <div className="flex flex-col gap-2">
@@ -324,6 +477,8 @@ export default function PropertiesList({
               setSortOrder("none");
               setRoomsFilter("all");
               setTypeFilter("all");
+              setUpdatedFilter("all");
+              setShowFavoritesOnly(false);
             }}
             className="self-start text-[11px] h-7 px-3 rounded-full border border-border bg-background hover:bg-muted text-foreground/70 hover:text-foreground transition"
           >
@@ -332,7 +487,7 @@ export default function PropertiesList({
         )}
       </div>
 
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-5 text-[11px]">
+      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-6 text-[11px]">
         <div className="space-y-1.5">
           <p className="font-medium">Moneda</p>
           <div className="flex gap-1.5 flex-wrap">
@@ -451,12 +606,35 @@ export default function PropertiesList({
             </Pill>
           </div>
         </div>
+        <div className="space-y-1.5">
+          <p className="font-medium">Actualización</p>
+          <div className="flex gap-1.5 flex-wrap">
+            <Pill
+              active={updatedFilter === "all"}
+              onClick={() => setUpdatedFilter("all")}
+            >
+              Todas
+            </Pill>
+            <Pill
+              active={updatedFilter === "today"}
+              onClick={() => setUpdatedFilter("today")}
+            >
+              Hoy
+            </Pill>
+          </div>
+        </div>
       </div>
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {cards.length === 0 && <Empty />}
         {cards.map((l, i) => {
-          const hasImg = !!l.mainImage;
+          const allImages =
+            l.images && l.images.length
+              ? l.images
+              : l.mainImage
+              ? [l.mainImage]
+              : [];
+          const hasImg = allImages.length > 0;
           const fav = isFav(l.url);
           return (
             <div
@@ -486,13 +664,16 @@ export default function PropertiesList({
                   } w-full bg-muted overflow-hidden`}
                 >
                   {hasImg ? (
-                    <Image
-                      src={l.mainImage || "/placeholder.svg"}
-                      alt={l.city}
-                      fill
-                      sizes="(max-width:768px) 100vw, (max-width:1200px) 50vw, 25vw"
-                      className="object-cover transition duration-500 group-hover:scale-[1.03]"
-                    />
+                    allImages.length > 1 ? (
+                      <ImageCarousel images={allImages} alt={l.city} />
+                    ) : (
+                      <img
+                        src={allImages[0] || "/placeholder.svg"}
+                        alt={l.city}
+                        loading="lazy"
+                        className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                      />
+                    )
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-[11px]">
                       Sin imagen
@@ -524,12 +705,16 @@ export default function PropertiesList({
                           {l.city}
                         </span>
                       )}
-                      {l.publishedDate && (
-                        <Tag className="bg-muted/60 text-muted-foreground">
-                          <Icon name="calendar" />
-                          {l.publishedDate}
-                        </Tag>
-                      )}
+                      {l.publishedDate &&
+                        (() => {
+                          const rel = formatRelativeDate(l.publishedDate);
+                          return rel ? (
+                            <Tag className="bg-muted/60 text-muted-foreground">
+                              <Icon name="calendar" />
+                              {rel}
+                            </Tag>
+                          ) : null;
+                        })()}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -550,15 +735,27 @@ export default function PropertiesList({
       </div>
 
       {hasMore && (
-        <div ref={loaderRef} className="flex flex-col items-center py-10">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-transparent" />
-          <p className="text-[11px] text-muted-foreground mt-3">Cargando...</p>
+        <div
+          ref={loaderRef}
+          className="flex flex-col items-center py-10 min-h-[48px]"
+        >
+          {isPaging && (
+            <>
+              <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-transparent" />
+              <p className="text-[11px] text-muted-foreground mt-3">
+                Cargando...
+              </p>
+            </>
+          )}
         </div>
       )}
-      {!hasMore && filteredListings.length > ITEMS_PER_PAGE && (
-        <p className="text-center text-[11px] text-muted-foreground py-10 border-t border-border/40">
-          {filteredListings.length} propiedades
-        </p>
+      {!hasMore && filteredListings.length > 0 && (
+        <div className="text-center text-[11px] text-muted-foreground py-10 border-t border-border/40 space-y-2">
+          <p>No hay más resultados</p>
+          <p className="text-muted-foreground/70">
+            {filteredListings.length} propiedades
+          </p>
+        </div>
       )}
     </div>
   );

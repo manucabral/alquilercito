@@ -149,10 +149,18 @@ function parseCSV(
       source ||
       "zonaprop") as PropertySource;
 
-    const validImage =
-      imagen && (imagen.startsWith("http://") || imagen.startsWith("https://"))
-        ? imagen
-        : "";
+    let images: string[] = [];
+    if (imagen) {
+      const parts = imagen
+        .split("|")
+        .map((p) => p.trim())
+        .filter(
+          (p) => p && (p.startsWith("http://") || p.startsWith("https://"))
+        );
+      if (parts.length) images = parts;
+    }
+    console.log("Parsed images:", images);
+    const validImage = images.length > 0 ? images[0] : "";
 
     const isDollar =
       esDolares.toLowerCase().trim() === "true" || esDolares.trim() === "1";
@@ -182,6 +190,7 @@ function parseCSV(
       bathrooms: bathroomsFormatted,
       description: descripcion || "",
       mainImage: validImage,
+      images: images.length ? images : undefined,
       url: url || "",
       publishedDate: fechaPublicacion || null,
     });
@@ -224,8 +233,13 @@ export async function fetchAllProperties(options?: {
     fetchZonaPropProperties(),
     fetchArgenPropProperties(),
   ]);
-
-  const combined = [...zonaPropListings, ...argenPropListings];
+  const combined = [...zonaPropListings, ...argenPropListings].sort((a, b) => {
+    if (!a.publishedDate && !b.publishedDate) return 0;
+    if (!a.publishedDate) return 1;
+    if (!b.publishedDate) return -1;
+    if (a.publishedDate === b.publishedDate) return 0;
+    return a.publishedDate > b.publishedDate ? -1 : 1;
+  });
   propertiesCache = {
     data: combined,
     expiresAt: nextDailyCutoff(),

@@ -13,6 +13,7 @@ export type PropertyListing = {
   bathrooms: string | null;
   description: string;
   mainImage: string;
+  images?: string[];
   url: string;
   publishedDate: string | null;
 };
