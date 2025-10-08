@@ -6,11 +6,9 @@ function normalizeDate(raw: string): string | null {
   if (!raw) return null;
   const trimmed = raw.trim();
   if (!trimmed) return null;
-  // Frases relativas en español (ej: "Publicado hace 3 días", "Publicado hace más de 1 año")
   const rel = trimmed.toLowerCase();
   if (rel.startsWith("publicado hace")) {
-    // Quitar prefijo
-  let rest = rel.replace(/^publicado hace\s*/, "").trim();
+    let rest = rel.replace(/^publicado hace\s*/, "").trim();
     let plusOne = false;
     if (rest.startsWith("más de")) {
       rest = rest.replace(/^más de\s*/, "").trim();
