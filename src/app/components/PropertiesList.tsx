@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
+import Image from "next/image";
 import type { PropertyListing } from "@/lib/types";
 
 interface PropertiesListProps {
@@ -29,15 +30,18 @@ export default function PropertiesList({
   const loaderRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const target = loaderRef.current; // capture ref value for cleanup
     const observer = new IntersectionObserver(
-      (e) => {
-        if (e[0].isIntersecting) setDisplayCount((p) => p + ITEMS_PER_PAGE);
+      (entries) => {
+        const first = entries[0];
+        if (first && first.isIntersecting)
+          setDisplayCount((p) => p + ITEMS_PER_PAGE);
       },
       { rootMargin: "120px" }
     );
-    if (loaderRef.current) observer.observe(loaderRef.current);
+    if (target) observer.observe(target);
     return () => {
-      if (loaderRef.current) observer.unobserve(loaderRef.current);
+      if (target) observer.unobserve(target);
     };
   }, []);
 
@@ -210,7 +214,12 @@ export default function PropertiesList({
     }
   };
 
-  const Pill = ({ active, onClick, children }: any) => (
+  interface PillProps {
+    active: boolean;
+    onClick: () => void;
+    children: React.ReactNode;
+  }
+  const Pill = ({ active, onClick, children }: PillProps) => (
     <button
       onClick={onClick}
       className={`h-7 px-3 rounded-full text-[11px] font-medium tracking-wide border transition-colors ${
@@ -222,7 +231,11 @@ export default function PropertiesList({
       {children}
     </button>
   );
-  const Tag = ({ children, className = "" }: any) => (
+  interface TagProps {
+    children: React.ReactNode;
+    className?: string;
+  }
+  const Tag = ({ children, className = "" }: TagProps) => (
     <span
       className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${className}`}
     >
@@ -255,7 +268,13 @@ export default function PropertiesList({
     </span>
   );
 
-  const Metric = ({ icon, children }: { icon: string; children: any }) => (
+  const Metric = ({
+    icon,
+    children,
+  }: {
+    icon: string;
+    children: React.ReactNode;
+  }) => (
     <span className="inline-flex items-center gap-1 rounded-md bg-muted/60 text-muted-foreground px-2 py-0.5 text-[10px] font-medium">
       <Icon name={icon} />
       {children}
@@ -467,11 +486,12 @@ export default function PropertiesList({
                   } w-full bg-muted overflow-hidden`}
                 >
                   {hasImg ? (
-                    <img
+                    <Image
                       src={l.mainImage || "/placeholder.svg"}
                       alt={l.city}
-                      loading="lazy"
-                      className="w-full h-full object-cover transition duration-500 group-hover:scale-[1.03]"
+                      fill
+                      sizes="(max-width:768px) 100vw, (max-width:1200px) 50vw, 25vw"
+                      className="object-cover transition duration-500 group-hover:scale-[1.03]"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-muted-foreground text-[11px]">

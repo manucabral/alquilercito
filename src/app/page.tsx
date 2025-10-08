@@ -3,6 +3,8 @@ import Header from "@/app/components/Header";
 import PropertiesList from "./components/PropertiesList";
 import type { PropertyListing } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Alquilercito — Alquileres actualizados diariamente",
   description:
@@ -67,7 +69,7 @@ export default async function Page() {
           {!error && listings.length === 0 && (
             <div className="bg-card rounded-lg border border-border p-8 text-center">
               <p className="text-muted-foreground">
-                No se encontraron propiedades
+                No se encontraron propiedades.
               </p>
             </div>
           )}

@@ -83,8 +83,6 @@ function parseCSV(
   } as const;
 
   const listings: PropertyListing[] = [];
-  let phExplicit = 0;
-  let phInferred = 0;
 
   for (let li = 1; li < lines.length; li++) {
     const line = lines[li];
@@ -162,12 +160,12 @@ function parseCSV(
     let isPH = false;
     if (esPHRaw) {
       isPH = esPHRaw.toLowerCase().trim() === "true" || esPHRaw.trim() === "1";
-      if (isPH) phExplicit++;
+      // explicit PH flag detected
     } else {
       const text = `${direccion} ${descripcion}`.toLowerCase();
       if (/\bph\b/.test(text)) {
         isPH = true;
-        phInferred++;
+        // inferred PH from text
       }
     }
 
