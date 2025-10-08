@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 import { useState, useEffect, useRef, useMemo } from "react";
 import type { PropertyListing } from "@/lib/types";

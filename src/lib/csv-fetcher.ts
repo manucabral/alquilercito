@@ -10,8 +10,7 @@ function normalizeDate(raw: string): string | null {
   const rel = trimmed.toLowerCase();
   if (rel.startsWith("publicado hace")) {
     // Quitar prefijo
-    let rest = rel.replace(/^publicado hace\s*/, "").trim();
-    let multiplier = 1;
+  let rest = rel.replace(/^publicado hace\s*/, "").trim();
     let plusOne = false;
     if (rest.startsWith("más de")) {
       rest = rest.replace(/^más de\s*/, "").trim();
