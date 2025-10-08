@@ -671,19 +671,21 @@ export default function PropertiesList({
         <div className="space-y-1.5">
           <p className="font-medium">Barrios</p>
           <div className="flex gap-1.5 flex-wrap">
-            {[
-              { key: "all", label: "Todos" },
-              { key: "palermo", label: "Palermo" },
-              { key: "coghlan", label: "Coghlan" },
-              { key: "belgrano", label: "Belgrano" },
-              { key: "saavedra", label: "Saavedra" },
-              { key: "villa urquiza", label: "Villa Urquiza" },
-              { key: "vicente lopez", label: "Vicente López" },
-            ].map((b) => (
+            {(
+              [
+                { key: "all", label: "Todos" },
+                { key: "palermo", label: "Palermo" },
+                { key: "coghlan", label: "Coghlan" },
+                { key: "belgrano", label: "Belgrano" },
+                { key: "saavedra", label: "Saavedra" },
+                { key: "villa urquiza", label: "Villa Urquiza" },
+                { key: "vicente lopez", label: "Vicente López" },
+              ] as const
+            ).map((b) => (
               <Pill
                 key={b.key}
-                active={cityPreset === (b.key as any)}
-                onClick={() => setCityPreset(b.key as any)}
+                active={cityPreset === b.key}
+                onClick={() => setCityPreset(b.key)}
               >
                 {b.label}
               </Pill>

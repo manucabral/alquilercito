@@ -8,13 +8,22 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Alquilercito — Alquileres actualizados diariamente",
   description:
-    "Compará alquileres de ZonaProp y ArgenProp. Actualizados cada día a las 16:00 hs. Cobertura inicial: Coghlan, Belgrano, Saavedra, Villa Urquiza y Vicente López. Filtrá por moneda, ambientes y localidad.",
+    "Compará alquileres de ZonaProp y ArgenProp. Actualizados cada día a las 16:00 hs. Cobertura inicial: Palermo, Coghlan, Belgrano, Saavedra, Villa Urquiza y Vicente López. Filtrá por moneda, ambientes y localidad.",
 };
 
 type SearchParams = { [key: string]: string | string[] | undefined };
 
 interface PageProps {
   searchParams?: SearchParams | Promise<SearchParams>;
+}
+
+function isSearchParamsPromise(v: unknown): v is Promise<SearchParams> {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    "then" in v &&
+    typeof (v as { then: unknown }).then === "function"
+  );
 }
 
 export default async function Page({ searchParams }: PageProps) {
@@ -30,11 +39,10 @@ export default async function Page({ searchParams }: PageProps) {
 
   let resolvedSearchParams: SearchParams = {};
   if (searchParams) {
-    if (typeof (searchParams as any).then === "function") {
+    if (isSearchParamsPromise(searchParams)) {
       try {
-        resolvedSearchParams = await (searchParams as Promise<SearchParams>);
+        resolvedSearchParams = await searchParams;
       } catch {
-        // Ignore search params resolution errors; leave empty object
         resolvedSearchParams = {};
       }
     } else {
@@ -64,8 +72,8 @@ export default async function Page({ searchParams }: PageProps) {
             </span>
             <br />
             <span className="text-foreground/60 text-[13px]">
-              Cobertura actual: Coghlan · Belgrano · Saavedra · Villa Urquiza ·
-              Vicente López
+              Cobertura actual: Palermo · Coghlan · Belgrano · Saavedra · Villa
+              Urquiza · Vicente López
             </span>
           </p>
           {error && (
