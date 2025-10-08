@@ -11,7 +11,13 @@ export const metadata = {
     "Compará alquileres de ZonaProp y ArgenProp. Actualizados cada día a las 16:00 hs. Cobertura inicial: Coghlan, Belgrano, Saavedra, Villa Urquiza y Vicente López. Filtrá por moneda, ambientes y localidad.",
 };
 
-export default async function Page() {
+type SearchParams = { [key: string]: string | string[] | undefined };
+
+interface PageProps {
+  searchParams?: SearchParams | Promise<SearchParams>;
+}
+
+export default async function Page({ searchParams }: PageProps) {
   let listings: PropertyListing[] = [];
   let error: string | null = null;
 
@@ -21,6 +27,28 @@ export default async function Page() {
     error = err instanceof Error ? err.message : "Error desconocido";
     console.error("Error fetching properties:", err);
   }
+
+  let resolvedSearchParams: SearchParams = {};
+  if (searchParams) {
+    if (typeof (searchParams as any).then === "function") {
+      try {
+        resolvedSearchParams = await (searchParams as Promise<SearchParams>);
+      } catch {
+        // Ignore search params resolution errors; leave empty object
+        resolvedSearchParams = {};
+      }
+    } else {
+      resolvedSearchParams = searchParams as SearchParams;
+    }
+  }
+
+  const rawTarget = resolvedSearchParams.target;
+  const highlightTarget =
+    typeof rawTarget === "string"
+      ? rawTarget
+      : Array.isArray(rawTarget)
+      ? rawTarget[0]
+      : undefined;
 
   return (
     <>
@@ -63,7 +91,10 @@ export default async function Page() {
           )}
 
           {!error && listings.length > 0 && (
-            <PropertiesList initialListings={listings} />
+            <PropertiesList
+              initialListings={listings}
+              highlightTarget={highlightTarget}
+            />
           )}
 
           {!error && listings.length === 0 && (

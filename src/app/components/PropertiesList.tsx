@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import type { PropertyListing } from "@/lib/types";
 import { useCallback } from "react";
+import { useRouter } from "next/navigation";
 
 interface PropertiesListProps {
   initialListings: PropertyListing[];
+  highlightTarget?: string;
 }
 
 const ITEMS_PER_PAGE = 12;
@@ -13,11 +15,22 @@ const FAVORITES_KEY = "alquilercito:favorites";
 
 export default function PropertiesList({
   initialListings,
+  highlightTarget,
 }: PropertiesListProps) {
+  const router = useRouter();
   const [sortOrder, setSortOrder] = useState<"asc" | "desc" | "none">("none");
   const [currencyFilter, setCurrencyFilter] = useState<"all" | "usd" | "pesos">(
     "all"
   );
+  const [cityPreset, setCityPreset] = useState<
+    | "all"
+    | "palermo"
+    | "coghlan"
+    | "belgrano"
+    | "saavedra"
+    | "villa urquiza"
+    | "vicente lopez"
+  >("all");
   const [citySearch, setCitySearch] = useState("");
   const [roomsFilter, setRoomsFilter] = useState<
     "all" | "1" | "2" | "3" | "4+"
@@ -28,6 +41,7 @@ export default function PropertiesList({
   const [favorites, setFavorites] = useState<Set<string>>(new Set());
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null); // feedback after sharing
   const loaderRef = useRef<HTMLDivElement>(null);
   const [isPaging, setIsPaging] = useState(false); // control spinner visibility
   const isPagingRef = useRef(false); // avoid rapid multiple increments from observer
@@ -59,6 +73,7 @@ export default function PropertiesList({
   }, [
     currencyFilter,
     citySearch,
+    cityPreset,
     sortOrder,
     roomsFilter,
     typeFilter,
@@ -100,14 +115,24 @@ export default function PropertiesList({
     currencyFilter === "all"
       ? ls
       : ls.filter((l) => (currencyFilter === "usd" ? l.isDollar : !l.isDollar));
-  const filterByCity = (ls: PropertyListing[]) =>
-    !citySearch.trim()
-      ? ls
-      : ls.filter(
-          (l) =>
-            l.city.toLowerCase().includes(citySearch.toLowerCase()) ||
-            l.address.toLowerCase().includes(citySearch.toLowerCase())
-        );
+  const filterByCity = (ls: PropertyListing[]) => {
+    let out = ls;
+    if (cityPreset !== "all") {
+      const target = cityPreset.toLowerCase();
+      out = out.filter((l) =>
+        [l.city, l.address].some((v) => v.toLowerCase().includes(target))
+      );
+    }
+    if (citySearch.trim()) {
+      const q = citySearch.toLowerCase();
+      out = out.filter(
+        (l) =>
+          l.city.toLowerCase().includes(q) ||
+          l.address.toLowerCase().includes(q)
+      );
+    }
+    return out;
+  };
   const filterByRooms = (ls: PropertyListing[]) =>
     roomsFilter === "all"
       ? ls
@@ -136,11 +161,10 @@ export default function PropertiesList({
   };
 
   const formatRelativeDate = useCallback((iso: string) => {
-    // Parse YYYY-MM-DD as local date (avoid UTC shift that pushes to previous day)
     if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(iso)) return null;
     const [y, m, d] = iso.split("-").map(Number);
     if (!y || !m || !d) return null;
-    const startOfDate = new Date(y, m - 1, d); // local midnight
+    const startOfDate = new Date(y, m - 1, d);
     const now = new Date();
     const startOfToday = new Date(
       now.getFullYear(),
@@ -151,6 +175,17 @@ export default function PropertiesList({
     const diffDays = Math.floor(diffMs / 86400000);
     if (diffDays <= 0) return "Actualizado hoy";
     if (diffDays === 1) return "Actualizado hace 1 día";
+    // Convert to months / years thresholds
+    if (diffDays >= 365) {
+      const years = Math.floor(diffDays / 365);
+      if (years === 1) return "Actualizado hace 1 año";
+      return `Actualizado hace ${years} años`;
+    }
+    if (diffDays >= 30) {
+      const months = Math.floor(diffDays / 30);
+      if (months === 1) return "Actualizado hace 1 mes";
+      return `Actualizado hace ${months} meses`;
+    }
     return `Actualizado hace ${diffDays} días`;
   }, []);
 
@@ -167,6 +202,45 @@ export default function PropertiesList({
       if (!py || !pm || !pd) return false;
       return py === y && pm - 1 === m && pd === d;
     });
+  };
+
+  // Try to find the highlighted listing (by URL exact match)
+  // Allow local clearing of highlight without full page navigation
+  const [clearedHighlight, setClearedHighlight] = useState(false);
+  const highlighted = useMemo(() => {
+    if (clearedHighlight) return undefined;
+    return highlightTarget
+      ? initialListings.find((l) => l.url === highlightTarget)
+      : undefined;
+  }, [highlightTarget, initialListings, clearedHighlight]);
+
+  // Resolve site origin (prefer explicit NEXT_PUBLIC_SITE_URL, fallback to window origin at runtime)
+  const getSiteOrigin = () => {
+    if (typeof window !== "undefined") {
+      return (
+        process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ||
+        window.location.origin.replace(/\/$/, "")
+      );
+    }
+    return process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") || "";
+  };
+
+  const buildShareUrl = (propertyUrl: string) => {
+    const base = getSiteOrigin();
+    return `${base}?target=${encodeURIComponent(propertyUrl)}`;
+  };
+
+  const handleShare = async (propertyUrl: string) => {
+    const shareUrl = buildShareUrl(propertyUrl);
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopiedId(propertyUrl);
+      setTimeout(() => {
+        setCopiedId((prev) => (prev === propertyUrl ? null : prev));
+      }, 2000);
+    } catch (err) {
+      console.warn("Copy failed", err);
+    }
   };
 
   const filteredListings = sortListings(
@@ -201,11 +275,15 @@ export default function PropertiesList({
       }
     }
   }, [displayCount, filteredListings.length, isPaging]);
-  const displayedListings = filteredListings.slice(0, displayCount);
+  const filteredMinusHighlight = highlighted
+    ? filteredListings.filter((l) => l !== highlighted)
+    : filteredListings;
+  const displayedListings = filteredMinusHighlight.slice(0, displayCount);
   const hasMore = displayCount < filteredListings.length;
   const hasFilters =
     currencyFilter !== "all" ||
     citySearch.trim() ||
+    cityPreset !== "all" ||
     sortOrder !== "none" ||
     roomsFilter !== "all" ||
     typeFilter !== "all" ||
@@ -463,6 +541,106 @@ export default function PropertiesList({
 
   return (
     <div className="space-y-8 max-w-7xl mx-auto">
+      {highlighted && (
+        <div className="border border-emerald-500/50 rounded-lg p-3 bg-emerald-500/5 relative">
+          <div className="flex items-start gap-3">
+            <div className="relative w-40 h-28 sm:w-48 sm:h-32 rounded-md overflow-hidden bg-muted flex-shrink-0">
+              <a
+                href={highlighted.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="group block w-full h-full"
+              >
+                {highlighted.images && highlighted.images.length > 1 ? (
+                  <ImageCarousel
+                    images={highlighted.images}
+                    alt={highlighted.city}
+                  />
+                ) : highlighted.images && highlighted.images.length === 1 ? (
+                  <img
+                    src={highlighted.images[0] || "/placeholder.svg"}
+                    alt={highlighted.city}
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : highlighted.mainImage ? (
+                  <img
+                    src={highlighted.mainImage || "/placeholder.svg"}
+                    alt={highlighted.city}
+                    loading="lazy"
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground text-[10px]">
+                    Sin imagen
+                  </div>
+                )}
+                <div className="absolute top-1 left-1">
+                  <SourceBadge source={highlighted.source} />
+                </div>
+              </a>
+            </div>
+            <div className="flex-1 min-w-0 space-y-1.5">
+              <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-2">
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                Alguien te compartió esta propiedad
+              </p>
+              <p className="text-sm font-semibold flex items-center gap-2">
+                <span className="text-emerald-600 dark:text-emerald-400">
+                  {highlighted.price}
+                </span>
+                {highlighted.expenses && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-300">
+                    + {highlighted.expenses}
+                  </span>
+                )}
+              </p>
+              <p className="text-[12px] font-medium text-foreground line-clamp-1">
+                {highlighted.address || highlighted.city}
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {highlighted.totalM2 && (
+                  <Metric icon="ruler">{highlighted.totalM2}</Metric>
+                )}
+                {highlighted.rooms && (
+                  <Metric icon="rooms">{highlighted.rooms}</Metric>
+                )}
+                {highlighted.bathrooms && (
+                  <Metric icon="bath">{highlighted.bathrooms}</Metric>
+                )}
+              </div>
+              {highlighted.description && (
+                <p className="text-[10px] leading-relaxed text-muted-foreground line-clamp-2">
+                  {highlighted.description}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-col gap-1 items-end ml-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setClearedHighlight(true);
+                  if (typeof window !== "undefined") {
+                    const url = new URL(window.location.href);
+                    url.searchParams.delete("target");
+                    router.replace(url.pathname + url.search + url.hash);
+                  }
+                }}
+                className="text-[10px] px-2 h-6 rounded-md border border-emerald-600/40 hover:bg-emerald-600/10 transition"
+              >
+                Quitar
+              </button>
+              <button
+                type="button"
+                onClick={() => handleShare(highlighted.url)}
+                className="text-[10px] px-2 h-6 rounded-md border border-emerald-600/40 hover:bg-emerald-600/10 transition"
+              >
+                {copiedId === highlighted.url ? "Copiado" : "Copiar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-col gap-2">
         <h2 className="text-base font-semibold tracking-tight flex items-center gap-2">
           Propiedades{" "}
@@ -475,6 +653,7 @@ export default function PropertiesList({
             onClick={() => {
               setCurrencyFilter("all");
               setCitySearch("");
+              setCityPreset("all");
               setSortOrder("none");
               setRoomsFilter("all");
               setTypeFilter("all");
@@ -489,6 +668,28 @@ export default function PropertiesList({
       </div>
 
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-6 text-[11px]">
+        <div className="space-y-1.5">
+          <p className="font-medium">Barrios</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {[
+              { key: "all", label: "Todos" },
+              { key: "palermo", label: "Palermo" },
+              { key: "coghlan", label: "Coghlan" },
+              { key: "belgrano", label: "Belgrano" },
+              { key: "saavedra", label: "Saavedra" },
+              { key: "villa urquiza", label: "Villa Urquiza" },
+              { key: "vicente lopez", label: "Vicente López" },
+            ].map((b) => (
+              <Pill
+                key={b.key}
+                active={cityPreset === (b.key as any)}
+                onClick={() => setCityPreset(b.key as any)}
+              >
+                {b.label}
+              </Pill>
+            ))}
+          </div>
+        </div>
         <div className="space-y-1.5">
           <p className="font-medium">Moneda</p>
           <div className="flex gap-1.5 flex-wrap">
@@ -652,6 +853,22 @@ export default function PropertiesList({
                 }`}
               >
                 {fav ? "★" : "☆"}
+              </button>
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleShare(l.url);
+                }}
+                aria-label="Copiar enlace"
+                title="Copiar enlace"
+                className={`absolute top-2 right-11 z-10 h-7 px-2 inline-flex items-center justify-center rounded-full backdrop-blur-md border text-[11px] font-medium tracking-wide transition ${
+                  copiedId === l.url
+                    ? "bg-emerald-600/90 text-white border-emerald-500"
+                    : "bg-background/70 border-border hover:bg-muted text-foreground/70 hover:text-foreground"
+                }`}
+              >
+                {copiedId === l.url ? "✔" : "🔗"}
               </button>
               <a
                 href={l.url}

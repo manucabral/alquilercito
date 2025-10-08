@@ -9,10 +9,10 @@ function normalizeDate(raw: string): string | null {
   const rel = trimmed.toLowerCase();
   if (rel.startsWith("publicado hace")) {
     let rest = rel.replace(/^publicado hace\s*/, "").trim();
-    let plusOne = false;
+    let hasMasDe = false;
     if (rest.startsWith("más de")) {
       rest = rest.replace(/^más de\s*/, "").trim();
-      plusOne = true;
+      hasMasDe = true;
     }
     const match = rest.match(
       /^(\d+)?\s*(año|años|mes|meses|día|días|hora|horas)/
@@ -22,7 +22,10 @@ function normalizeDate(raw: string): string | null {
       const unit = match[2];
       let amount = numRaw ? parseInt(numRaw, 10) : 1;
       if (isNaN(amount) || amount <= 0) amount = 1;
-      if (plusOne) amount += 1; // estimación mínima +1
+      if (hasMasDe) {
+        const singularYear = unit.startsWith("año") && amount === 1; // "mas de 1 año"
+        if (!singularYear) amount += 1; // para "mas de X" excepto el caso singular de año
+      }
       const now = new Date();
       const ref = new Date(now);
       switch (unit) {
@@ -195,8 +198,6 @@ function parseCSV(
   } as const;
 
   const listings: PropertyListing[] = [];
-  // Debug metric (comment out in production if noisy)
-  // console.info('[CSV] Registros totales:', records.length - 1);
   for (let r = 1; r < records.length; r++) {
     const row = records[r];
     if (row.length === 1 && row[0].trim() === "") continue; // skip blank
@@ -297,7 +298,6 @@ function parseCSV(
     });
   }
 
-  // console.info('[CSV] Registros parseados válidos:', listings.length);
   return listings;
 }
 
