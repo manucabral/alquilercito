@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
         protocol: "https",
         hostname: "imgar.argenprop.com",
       },
+      {
+        protocol: "https",
+        hostname: "argenprop.com",
+      },
     ],
   },
 };
