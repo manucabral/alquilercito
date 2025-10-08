@@ -705,16 +705,24 @@ export default function PropertiesList({
                           {l.city}
                         </span>
                       )}
-                      {l.publishedDate &&
-                        (() => {
+                      {(() => {
+                        if (l.publishedDate) {
                           const rel = formatRelativeDate(l.publishedDate);
-                          return rel ? (
-                            <Tag className="bg-muted/60 text-muted-foreground">
-                              <Icon name="calendar" />
-                              {rel}
-                            </Tag>
-                          ) : null;
-                        })()}
+                          if (rel) {
+                            return (
+                              <Tag className="bg-muted/60 text-muted-foreground">
+                                <Icon name="calendar" />
+                                {rel}
+                              </Tag>
+                            );
+                          }
+                        }
+                        return (
+                          <Tag className="bg-muted/40 text-muted-foreground/70">
+                            <Icon name="calendar" /> Sin fecha
+                          </Tag>
+                        );
+                      })()}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-1.5">

@@ -2,6 +2,90 @@ import type { PropertyListing, PropertySource } from "./types";
 let propertiesCache: { data: PropertyListing[]; expiresAt: number } | null =
   null;
 
+function normalizeDate(raw: string): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Frases relativas en español (ej: "Publicado hace 3 días", "Publicado hace más de 1 año")
+  const rel = trimmed.toLowerCase();
+  if (rel.startsWith("publicado hace")) {
+    // Quitar prefijo
+    let rest = rel.replace(/^publicado hace\s*/, "").trim();
+    let multiplier = 1;
+    let plusOne = false;
+    if (rest.startsWith("más de")) {
+      rest = rest.replace(/^más de\s*/, "").trim();
+      plusOne = true;
+    }
+    const match = rest.match(
+      /^(\d+)?\s*(año|años|mes|meses|día|días|hora|horas)/
+    );
+    if (match) {
+      const numRaw = match[1];
+      const unit = match[2];
+      let amount = numRaw ? parseInt(numRaw, 10) : 1;
+      if (isNaN(amount) || amount <= 0) amount = 1;
+      if (plusOne) amount += 1; // estimación mínima +1
+      const now = new Date();
+      const ref = new Date(now);
+      switch (unit) {
+        case "hora":
+        case "horas":
+          ref.setHours(ref.getHours() - amount);
+          break;
+        case "día":
+        case "días":
+          ref.setDate(ref.getDate() - amount);
+          break;
+        case "mes":
+        case "meses":
+          ref.setMonth(ref.getMonth() - amount);
+          break;
+        case "año":
+        case "años":
+          ref.setFullYear(ref.getFullYear() - amount);
+          break;
+      }
+      const y = ref.getFullYear();
+      const m = (ref.getMonth() + 1).toString().padStart(2, "0");
+      const d = ref.getDate().toString().padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const isoDate = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDate) return trimmed;
+
+  const isoDateTime = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})[T\s].*/);
+  if (isoDateTime)
+    return `${isoDateTime[1]}-${isoDateTime[2]}-${isoDateTime[3]}`;
+  // DD/MM/YYYY o DD-MM-YYYY
+  const dmy = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmy) {
+    const d = parseInt(dmy[1], 10);
+    const m = parseInt(dmy[2], 10);
+    const y = parseInt(dmy[3], 10);
+    if (m >= 1 && m <= 12 && d >= 1 && d <= 31) {
+      const dd = d.toString().padStart(2, "0");
+      const mm = m.toString().padStart(2, "0");
+      return `${y}-${mm}-${dd}`;
+    }
+  }
+
+  if (/^\d{10}$/.test(trimmed) || /^\d{13}$/.test(trimmed)) {
+    let ts = parseInt(trimmed, 10);
+    if (trimmed.length === 10) ts *= 1000;
+    const date = new Date(ts);
+    if (!isNaN(date.getTime())) {
+      const y = date.getFullYear();
+      const m = (date.getMonth() + 1).toString().padStart(2, "0");
+      const d = date.getDate().toString().padStart(2, "0");
+      return `${y}-${m}-${d}`;
+    }
+  }
+  return null;
+}
+
 function nextDailyCutoff(hour = 16, minute = 0): number {
   const now = new Date();
   const target = new Date(now);
@@ -159,7 +243,7 @@ function parseCSV(
         );
       if (parts.length) images = parts;
     }
-    console.log("Parsed images:", images);
+    // (log eliminado para producción)
     const validImage = images.length > 0 ? images[0] : "";
 
     const isDollar =
@@ -192,7 +276,7 @@ function parseCSV(
       mainImage: validImage,
       images: images.length ? images : undefined,
       url: url || "",
-      publishedDate: fechaPublicacion || null,
+      publishedDate: normalizeDate(fechaPublicacion) || null,
     });
   }
 
