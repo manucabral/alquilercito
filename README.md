@@ -2,9 +2,9 @@
 
 Alquileres actualizados diariamente a las 16:00 hs. Filtrá por moneda, ambientes y localidad.
 
-Cobertura inicial de barrios: Coghlan, Belgrano, Saavedra, Villa Urquiza y Vicente López.
+Cobertura inicial de barrios: Palermo, Coghlan, Belgrano, Saavedra, Villa Urquiza y Vicente López.
 
-Funciones principales:
+### Funciones principales
 
 - Unifica listados de múltiples fuentes.
 - Filtros por moneda, ambientes, localidad y tipo.
