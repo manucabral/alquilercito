@@ -321,6 +321,16 @@ export async function fetchArgenPropProperties(): Promise<PropertyListing[]> {
   }
 }
 
+export async function fetchRemaxProperties(): Promise<PropertyListing[]> {
+  try {
+    const csvContent = await fetchCSVFromGitHub("propiedades_remax.csv");
+    return parseCSV(csvContent, "remax");
+  } catch (error) {
+    console.error("Error fetching Remax CSV:", error);
+    return [];
+  }
+}
+
 export async function fetchAllProperties(options?: {
   force?: boolean;
 }): Promise<PropertyListing[]> {
@@ -331,11 +341,17 @@ export async function fetchAllProperties(options?: {
     return propertiesCache.data;
   }
 
-  const [zonaPropListings, argenPropListings] = await Promise.all([
-    fetchZonaPropProperties(),
-    fetchArgenPropProperties(),
-  ]);
-  const combined = [...zonaPropListings, ...argenPropListings].sort((a, b) => {
+  const [zonaPropListings, argenPropListings, remaxListings] =
+    await Promise.all([
+      fetchZonaPropProperties(),
+      fetchArgenPropProperties(),
+      fetchRemaxProperties(),
+    ]);
+  const combined = [
+    ...zonaPropListings,
+    ...argenPropListings,
+    ...remaxListings,
+  ].sort((a, b) => {
     if (!a.publishedDate && !b.publishedDate) return 0;
     if (!a.publishedDate) return 1;
     if (!b.publishedDate) return -1;

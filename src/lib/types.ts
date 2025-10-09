@@ -1,4 +1,4 @@
-export type PropertySource = "zonaprop" | "argenprop";
+export type PropertySource = "zonaprop" | "argenprop" | "remax";
 
 export type PropertyListing = {
   source: PropertySource;

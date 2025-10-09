@@ -32,14 +32,28 @@ export function Metric({
 }
 
 export function SourceBadge({ source }: { source: string }) {
-  const isZP = source === "zonaprop";
+  const s = source?.toLowerCase();
+  const styles =
+    s === "zonaprop"
+      ? "bg-orange-500/90 text-white"
+      : s === "argenprop"
+      ? "bg-emerald-600/90 text-white"
+      : s === "remax"
+      ? "bg-white text-neutral-900 border border-border"
+      : "bg-muted text-foreground";
+  const label =
+    s === "zonaprop"
+      ? "ZonaProp"
+      : s === "argenprop"
+      ? "ArgenProp"
+      : s === "remax"
+      ? "RE/MAX"
+      : source;
   return (
     <span
-      className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md tracking-wide shadow-sm ${
-        isZP ? "bg-orange-500/90 text-white" : "bg-emerald-600/90 text-white"
-      }`}
+      className={`inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-semibold rounded-md tracking-wide shadow-sm ${styles}`}
     >
-      {isZP ? "ZonaProp" : "ArgenProp"}
+      {label}
     </span>
   );
 }
