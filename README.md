@@ -4,6 +4,8 @@ Alquileres actualizados diariamente a las 16:00 hs. Filtrá por moneda, ambiente
 
 Cobertura inicial de barrios: Palermo, Coghlan, Belgrano, Saavedra, Villa Urquiza y Vicente López.
 
+Fuentes de datos: ZonaProp, ArgenProp y RE/MAX.
+
 ### Funciones principales
 
 - Unifica listados de múltiples fuentes.
